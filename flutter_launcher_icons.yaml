@@ -1,0 +1,9 @@
+flutter_launcher_icons:
+  android: true
+  ios: false
+  web: false
+  image_path: "C:/Users/HomePC/Pictures/jayraj.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#F6F9F4"
+  adaptive_icon_foreground: "C:/Users/HomePC/Pictures/jayraj.png"
+  remove_alpha_ios: false
