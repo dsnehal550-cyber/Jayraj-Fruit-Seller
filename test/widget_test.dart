@@ -1,131 +1,218 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fruitseller/main.dart';
+import 'package:fruitseller/widgets/fruit_product_card.dart';
 
 void main() {
-  testWidgets('entry screen shows customer and seller choices', (tester) async {
-    await tester.pumpWidget(const JayrajFruitSellerApp());
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-    expect(find.text('Jayraj Fruit Seller'), findsOneWidget);
-    expect(find.text('Customer'), findsWidgets);
-    expect(find.text('Seller'), findsWidgets);
+  setUp(() {
+    SharedPreferences.setMockInitialValues({
+      'customer_saved_address': '{"name":"Test","mobile":"9876543210","house":"101","street":"MG Road","city":"CSN","pin":"431001","latitude":19.8762,"longitude":75.3433}'
+    });
   });
 
-  testWidgets('customer path navigates to login and home', (tester) async {
+  testWidgets('startup splash navigates to mobile login screen', (tester) async {
     await tester.pumpWidget(const JayrajFruitSellerApp());
 
-    await tester.tap(find.text('Customer'));
-    await tester.pump();
-    await tester.tap(find.text('Continue'));
+    expect(find.byType(AppSplashScreen), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
 
-    expect(find.text('Customer Login/Register'), findsOneWidget);
+    expect(find.text('Customer login'), findsOneWidget);
+    expect(find.text('Mobile number'), findsOneWidget);
+  });
 
-    await tester.tap(find.text('Login'));
+  testWidgets('full customer flow: mobile login -> OTP -> profile -> catalogue -> decimal quantity -> cart -> checkout', (tester) async {
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(const JayrajFruitSellerApp());
+    await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
 
-    expect(find.text('Customer Login'), findsOneWidget);
-
-    await tester.tap(find.text('Login'));
+    // 1. Mobile Login
+    final phoneField = find.byType(TextField).first;
+    await tester.enterText(phoneField, '9876543210');
+    await tester.tap(find.text('Get OTP'));
     await tester.pumpAndSettle();
 
+    expect(find.text('Demo OTP: 123456'), findsOneWidget);
+
+    // 2. Enter OTP
+    final otpField = find.byType(TextField).at(1);
+    await tester.enterText(otpField, '123456');
+    await tester.tap(find.text('Verify OTP'));
+    await tester.pumpAndSettle();
+
+    // 3. Profile Setup
+    expect(find.text('Complete your profile'), findsOneWidget);
+    final nameField = find.byType(TextField).at(0);
+    final emailField = find.byType(TextField).at(1);
+
+    await tester.enterText(nameField, 'Jayraj Customer');
+    await tester.enterText(emailField, 'jayraj@example.com');
+    await tester.tap(find.text('Continue to Home'));
+    await tester.pumpAndSettle();
+
+    // 4. Customer Home & Catalogue
     expect(find.text('Customer Home'), findsOneWidget);
-  });
+    expect(find.text('Fruit Catalogue'), findsOneWidget);
+    expect(find.text('Mango'), findsOneWidget);
+    expect(find.text('Apple'), findsOneWidget);
 
-  testWidgets('seller path navigates to seller login only and can switch role', (tester) async {
-    await tester.pumpWidget(const JayrajFruitSellerApp());
+    // 5. Search filtering
+    final searchField = find.byType(TextField).first;
+    await tester.enterText(searchField, 'Mango');
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FruitProductCard, 'Mango'), findsOneWidget);
+    expect(find.widgetWithText(FruitProductCard, 'Apple'), findsNothing);
 
-    await tester.tap(find.text('Seller'));
-    await tester.pump();
-    await tester.tap(find.text('Continue'));
+    // Clear search
+    await tester.enterText(searchField, '');
     await tester.pumpAndSettle();
 
-    expect(find.text('Seller Login'), findsOneWidget);
-    expect(find.text('Register'), findsNothing);
+    // 6. Category filtering (Offers Today)
+    await tester.tap(find.text('Offers Today'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FruitProductCard, 'Pomegranate'), findsOneWidget);
+    expect(find.widgetWithText(FruitProductCard, 'Mango'), findsNothing);
 
-    await tester.tap(find.text('Switch Role'));
+    // Reset category to All
+    await tester.tap(find.text('All'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Choose your role'), findsOneWidget);
-    expect(find.text('Customer'), findsWidgets);
-    expect(find.text('Seller'), findsWidgets);
-  });
+    // 7. Out of stock behavior
+    expect(find.widgetWithText(FruitProductCard, 'Orange'), findsOneWidget);
+    expect(find.text('Out of Stock'), findsWidgets);
 
-  testWidgets('customer can add fruit to cart and confirm a self pickup order', (tester) async {
-    await tester.pumpWidget(const JayrajFruitSellerApp());
-
-    await tester.tap(find.text('Customer'));
-    await tester.pump();
-    await tester.tap(find.text('Continue'));
+    // 8. Open Fruit Details Page for Mango
+    await tester.tap(find.widgetWithText(FruitProductCard, 'Mango'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Login'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Login'));
-    await tester.pumpAndSettle();
+    // Initially quantity input & total are hidden, only ADD button is shown
+    expect(find.byKey(const Key('add_button')), findsOneWidget);
+    expect(find.text('Enter Quantity (in kg)'), findsNothing);
 
-    expect(find.text('Customer Home'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('add_to_cart_Mango')));
+    // Tap ADD button to reveal quantity input and BUY NOW button
+    await tester.tap(find.byKey(const Key('add_button')));
     await tester.pumpAndSettle();
 
-    final cartButton = find.byWidgetPredicate(
-      (widget) =>
-          widget is IconButton &&
-          widget.onPressed != null &&
-          widget.icon is Icon &&
-          (widget.icon as Icon).icon == Icons.shopping_cart_outlined,
-    );
+    expect(find.text('Enter Quantity (in kg)'), findsOneWidget);
+    expect(find.text('Total Price:'), findsOneWidget);
+    expect(find.text('₹120'), findsWidgets); // Default 1 kg total
 
-    expect(cartButton, findsOneWidget);
-
-    final cartAction = tester.widget<IconButton>(cartButton);
-    cartAction.onPressed?.call();
+    // 9. Manual decimal quantity input (e.g., 2.5 kg)
+    final qtyInput = find.byKey(const Key('fruit_quantity_input'));
+    await tester.enterText(qtyInput, '2.5');
     await tester.pumpAndSettle();
 
-    expect(find.text('My Cart'), findsOneWidget);
+    // Total should update to 2.5 * 120 = ₹300
+    expect(find.text('₹300'), findsOneWidget);
+
+    // 10. Direct BUY NOW Flow
+    await tester.tap(find.byKey(const Key('buy_now_button')));
+    await tester.pumpAndSettle();
+
+    // Step 3: Order Confirmation page
+    expect(find.text('Order Confirmation'), findsOneWidget);
     expect(find.text('Mango'), findsWidgets);
-    expect(find.text('Cart Total'), findsOneWidget);
+    expect(find.text('Quantity: 2.5 kg'), findsOneWidget);
+    expect(find.text('₹300'), findsWidgets);
 
-    await tester.tap(find.text('Checkout'));
+    await tester.tap(find.byKey(const Key('confirm_order_button')));
     await tester.pumpAndSettle();
 
-    final selfPickupRadio = find.byWidgetPredicate(
-      (widget) =>
-          widget is RadioListTile<String> &&
-          widget.value == 'Self Pickup',
-    );
+    // Step 4: Payment Method screen
+    expect(find.text('Payment Method'), findsOneWidget);
+    expect(find.text('Online Payment'), findsOneWidget);
+    expect(find.text('Cash on Delivery (COD)'), findsOneWidget);
+    expect(find.text('PhonePe'), findsOneWidget);
+    expect(find.text('Google Pay (GPay)'), findsOneWidget);
+    expect(find.text('UPI QR Code'), findsOneWidget);
 
-    expect(selfPickupRadio, findsOneWidget);
-    await tester.tap(selfPickupRadio);
+    // Test UPI QR option selection (displays demo QR card)
+    await tester.tap(find.byKey(const Key('online_sub_upi_qr')));
+    await tester.pumpAndSettle();
+    expect(find.text('DEMO UPI QR CODE'), findsOneWidget);
+
+    // Test PhonePe selection
+    await tester.tap(find.byKey(const Key('online_sub_phonepe')));
     await tester.pumpAndSettle();
 
-    final cashOnDeliveryRadio = find.byWidgetPredicate(
-      (widget) =>
-          widget is RadioListTile<String> &&
-          widget.value == 'Cash on Delivery',
-    );
-
-    expect(cashOnDeliveryRadio, findsOneWidget);
-    await tester.tap(cashOnDeliveryRadio);
+    await tester.tap(find.byKey(const Key('continue_to_address_button')));
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(
-      find.text('Place Order'),
-      100,
-      scrollable: find.byType(Scrollable),
-    );
-    await tester.tap(find.text('Place Order'));
+    // Step 5: Delivery Address screen
+    expect(find.text('Delivery Address'), findsWidgets);
+
+    // Fill form fields if form is active
+    final addrNameField = find.widgetWithText(TextFormField, 'Full Name');
+    if (addrNameField.evaluate().isNotEmpty) {
+      await tester.enterText(addrNameField, 'Jayraj Customer');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Mobile Number'), '9876543210');
+      await tester.enterText(find.widgetWithText(TextFormField, 'House / Flat No.'), '101');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Area / Street'), 'MG Road');
+      await tester.enterText(find.widgetWithText(TextFormField, 'City'), 'Chhatrapati Sambhajinagar');
+      await tester.enterText(find.widgetWithText(TextFormField, 'PIN Code'), '431001');
+    }
+
+    await tester.tap(find.byKey(const Key('place_order_button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Order placed successfully'), findsOneWidget);
+    // Step 6: Delivery Unavailable Dialog (since seller coordinates are missing)
+    expect(find.text('Delivery Unavailable'), findsOneWidget);
+    expect(find.textContaining('Seller location not configured yet'), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('excess quantity validation prevents adding to cart', (tester) async {
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(const JayrajFruitSellerApp());
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+
+    // Login directly
+    final phoneField = find.byType(TextField).first;
+    await tester.enterText(phoneField, '9876543210');
+    await tester.tap(find.text('Get OTP'));
+    await tester.pumpAndSettle();
+
+    final otpField = find.byType(TextField).at(1);
+    await tester.enterText(otpField, '123456');
+    await tester.tap(find.text('Verify OTP'));
+    await tester.pumpAndSettle();
+
+    final nameField = find.byType(TextField).at(0);
+    final emailField = find.byType(TextField).at(1);
+    await tester.enterText(nameField, 'Test User');
+    await tester.enterText(emailField, 'test@example.com');
+    await tester.tap(find.text('Continue to Home'));
+    await tester.pumpAndSettle();
+
+    // Open Apple (Stock: 25.5 kg)
+    await tester.tap(find.widgetWithText(FruitProductCard, 'Apple'));
+    await tester.pumpAndSettle();
+
+    // Tap ADD button to reveal quantity input
+    await tester.tap(find.byKey(const Key('add_button')));
+    await tester.pumpAndSettle();
+
+    final qtyInput = find.byKey(const Key('fruit_quantity_input'));
+    await tester.enterText(qtyInput, '100');
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('exceeds available stock'), findsOneWidget);
+
+    final confirmBtn = tester.widget<OutlinedButton>(find.byKey(const Key('add_to_cart_confirm_button')));
+    expect(confirmBtn.onPressed, isNull);
   });
 }
