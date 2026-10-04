@@ -1,5 +1,7 @@
 import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/customer_order.dart';
 
 class OrderStorageService {
@@ -25,9 +27,14 @@ class OrderStorageService {
   }
 
   static Future<void> saveOrder(CustomerOrder order) async {
+    await saveOrders([order]);
+  }
+
+  static Future<void> saveOrders(List<CustomerOrder> newOrders) async {
+    if (newOrders.isEmpty) return;
+
     final orders = await getOrders();
-    // Add new order at front
-    orders.insert(0, order);
+    orders.insertAll(0, newOrders);
 
     final prefs = await SharedPreferences.getInstance();
     final jsonList = orders.map((o) => o.toJson()).toList();

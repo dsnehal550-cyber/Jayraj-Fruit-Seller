@@ -6,10 +6,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'data/sample_fruits.dart';
 import 'models/cart_item.dart';
 import 'models/customer_address.dart';
+import 'models/customer_order.dart';
 import 'models/fruit_item.dart';
 import 'screens/address_form_screen.dart';
+import 'screens/cart_checkout_flow.dart';
 import 'screens/customer_orders_screen.dart';
+import 'services/delivery_availability_service.dart';
 import 'services/location_service.dart';
+import 'services/order_storage_service.dart';
 import 'widgets/fruit_details_page.dart';
 import 'widgets/fruit_product_card.dart';
 
@@ -72,13 +76,17 @@ class _AppSplashScreenState extends State<AppSplashScreen> {
 
     if (savedProfile != null && savedMobile != null) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(builder: (context) => const CustomerHomeScreen()),
+        MaterialPageRoute<void>(
+          builder: (context) => const CustomerHomeScreen(),
+        ),
       );
       return;
     }
 
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(builder: (context) => const CustomerMobileLoginScreen()),
+      MaterialPageRoute<void>(
+        builder: (context) => const CustomerMobileLoginScreen(),
+      ),
     );
   }
 
@@ -131,17 +139,13 @@ class CustomerProfile {
   final String email;
   final String city;
 
-  Map<String, dynamic> toJson() => {
-        'name': name,
-        'email': email,
-        'city': city,
-      };
+  Map<String, dynamic> toJson() => {'name': name, 'email': email, 'city': city};
 
   factory CustomerProfile.fromJson(Map<String, dynamic> json) {
     return CustomerProfile(
       name: (json['name'] ?? '').toString(),
       email: (json['email'] ?? '').toString(),
-      city: (json['city'] ?? 'CSN').toString(),
+      city: defaultCustomerCity,
     );
   }
 }
@@ -150,7 +154,8 @@ class CustomerMobileLoginScreen extends StatefulWidget {
   const CustomerMobileLoginScreen({super.key});
 
   @override
-  State<CustomerMobileLoginScreen> createState() => _CustomerMobileLoginScreenState();
+  State<CustomerMobileLoginScreen> createState() =>
+      _CustomerMobileLoginScreenState();
 }
 
 class _CustomerMobileLoginScreenState extends State<CustomerMobileLoginScreen> {
@@ -180,22 +185,25 @@ class _CustomerMobileLoginScreenState extends State<CustomerMobileLoginScreen> {
     _generatedOtp.value = '123456';
     _otpSent.value = true;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('OTP sent. Use 123456 for demo verification.')),
+      const SnackBar(
+        content: Text('OTP sent. Use 123456 for demo verification.'),
+      ),
     );
   }
 
   Future<void> _verifyOtpAndContinue() async {
     final otp = _otpController.text.trim();
     if (otp.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter the OTP.')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Please enter the OTP.')));
       return;
     }
 
     if (otp != _generatedOtp.value) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Incorrect OTP. Use 123456 for demo verification.')),
+        const SnackBar(
+          content: Text('Incorrect OTP. Use 123456 for demo verification.'),
+        ),
       );
       return;
     }
@@ -210,7 +218,9 @@ class _CustomerMobileLoginScreenState extends State<CustomerMobileLoginScreen> {
         return;
       }
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(builder: (context) => const CustomerHomeScreen()),
+        MaterialPageRoute<void>(
+          builder: (context) => const CustomerHomeScreen(),
+        ),
       );
       return;
     }
@@ -274,10 +284,7 @@ class _CustomerMobileLoginScreenState extends State<CustomerMobileLoginScreen> {
               const SizedBox(height: 8),
               const Text(
                 'Enter your mobile number to continue.',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFF5B6E5F),
-                ),
+                style: TextStyle(fontSize: 16, color: Color(0xFF5B6E5F)),
               ),
               const SizedBox(height: 28),
               const Text(
@@ -294,10 +301,16 @@ class _CustomerMobileLoginScreenState extends State<CustomerMobileLoginScreen> {
                 keyboardType: TextInputType.phone,
                 decoration: InputDecoration(
                   hintText: 'Enter mobile number',
-                  prefixIcon: const Icon(Icons.phone_android_rounded, color: Color(0xFF2E8B57)),
+                  prefixIcon: const Icon(
+                    Icons.phone_android_rounded,
+                    color: Color(0xFF2E8B57),
+                  ),
                   filled: true,
                   fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 18,
+                    horizontal: 16,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                     borderSide: BorderSide.none,
@@ -332,10 +345,16 @@ class _CustomerMobileLoginScreenState extends State<CustomerMobileLoginScreen> {
                         keyboardType: TextInputType.number,
                         decoration: InputDecoration(
                           hintText: 'Enter OTP',
-                          prefixIcon: const Icon(Icons.lock_outline_rounded, color: Color(0xFF2E8B57)),
+                          prefixIcon: const Icon(
+                            Icons.lock_outline_rounded,
+                            color: Color(0xFF2E8B57),
+                          ),
                           filled: true,
                           fillColor: Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 18,
+                            horizontal: 16,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide.none,
@@ -382,13 +401,15 @@ class CustomerProfileSetupScreen extends StatefulWidget {
   final String mobileNumber;
 
   @override
-  State<CustomerProfileSetupScreen> createState() => _CustomerProfileSetupScreenState();
+  State<CustomerProfileSetupScreen> createState() =>
+      _CustomerProfileSetupScreenState();
 }
 
-class _CustomerProfileSetupScreenState extends State<CustomerProfileSetupScreen> {
+class _CustomerProfileSetupScreenState
+    extends State<CustomerProfileSetupScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  String _selectedCity = 'CSN';
+  String _selectedCity = defaultCustomerCity;
 
   @override
   void dispose() {
@@ -448,10 +469,7 @@ class _CustomerProfileSetupScreenState extends State<CustomerProfileSetupScreen>
               const SizedBox(height: 8),
               Text(
                 'Welcome to Jayraj Fruit Seller, ${widget.mobileNumber}',
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFF5B6E5F),
-                ),
+                style: const TextStyle(fontSize: 16, color: Color(0xFF5B6E5F)),
               ),
               const SizedBox(height: 28),
               const Text(
@@ -467,10 +485,16 @@ class _CustomerProfileSetupScreenState extends State<CustomerProfileSetupScreen>
                 controller: _nameController,
                 decoration: InputDecoration(
                   hintText: 'Enter your full name',
-                  prefixIcon: const Icon(Icons.person_outline_rounded, color: Color(0xFF2E8B57)),
+                  prefixIcon: const Icon(
+                    Icons.person_outline_rounded,
+                    color: Color(0xFF2E8B57),
+                  ),
                   filled: true,
                   fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 18,
+                    horizontal: 16,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                     borderSide: BorderSide.none,
@@ -492,10 +516,16 @@ class _CustomerProfileSetupScreenState extends State<CustomerProfileSetupScreen>
                 keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
                   hintText: 'you@example.com',
-                  prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFF2E8B57)),
+                  prefixIcon: const Icon(
+                    Icons.email_outlined,
+                    color: Color(0xFF2E8B57),
+                  ),
                   filled: true,
                   fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 18,
+                    horizontal: 16,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                     borderSide: BorderSide.none,
@@ -523,11 +553,10 @@ class _CustomerProfileSetupScreenState extends State<CustomerProfileSetupScreen>
                     isExpanded: true,
                     value: _selectedCity,
                     items: const [
-                      DropdownMenuItem(value: 'CSN', child: Text('CSN')),
-                      DropdownMenuItem(value: 'Aurangabad', child: Text('Aurangabad')),
-                      DropdownMenuItem(value: 'Pune', child: Text('Pune')),
-                      DropdownMenuItem(value: 'Nagpur', child: Text('Nagpur')),
-                      DropdownMenuItem(value: 'Mumbai', child: Text('Mumbai')),
+                      DropdownMenuItem(
+                        value: defaultCustomerCity,
+                        child: Text(defaultCustomerCity),
+                      ),
                     ],
                     onChanged: (value) {
                       if (value != null) {
@@ -596,15 +625,36 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               const SizedBox(height: 24),
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(color: Color(0xFFE9F7EC), shape: BoxShape.circle),
-                child: const Icon(Icons.location_on_rounded, color: Color(0xFF2E8B57), size: 48),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFE9F7EC),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.location_on_rounded,
+                  color: Color(0xFF2E8B57),
+                  size: 48,
+                ),
               ),
               const SizedBox(height: 20),
-              const Text('Get your device location', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Color(0xFF1F2A1F))),
+              const Text(
+                'Get your device location',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1F2A1F),
+                ),
+              ),
               const SizedBox(height: 8),
               const Text(
                 'Please enable location permission for better delivery experience',
@@ -621,11 +671,16 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                     await _handleEnableDeviceLocation();
                   },
                   icon: const Icon(Icons.my_location_rounded),
-                  label: const Text('Enable device location', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  label: const Text(
+                    'Enable device location',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF2E8B57),
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                 ),
               ),
@@ -639,11 +694,19 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                     _showAddAddressOptionsSheet();
                   },
                   icon: const Icon(Icons.add_location_alt_rounded),
-                  label: const Text('Add address', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  label: const Text(
+                    'Add address',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF2E8B57),
-                    side: const BorderSide(color: Color(0xFF2E8B57), width: 1.5),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    side: const BorderSide(
+                      color: Color(0xFF2E8B57),
+                      width: 1.5,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                 ),
               ),
@@ -669,12 +732,22 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               children: [
                 const Text(
                   'Add Address',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2E8B57)),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2E8B57),
+                  ),
                 ),
                 const SizedBox(height: 24),
                 ListTile(
-                  leading: const Icon(Icons.my_location_rounded, color: Color(0xFF2E8B57)),
-                  title: const Text('Use current location', style: TextStyle(fontWeight: FontWeight.w600)),
+                  leading: const Icon(
+                    Icons.my_location_rounded,
+                    color: Color(0xFF2E8B57),
+                  ),
+                  title: const Text(
+                    'Use current location',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                   onTap: () {
                     Navigator.of(ctx).pop();
                     _handleEnableDeviceLocation();
@@ -682,11 +755,21 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                 ),
                 const Divider(),
                 ListTile(
-                  leading: const Icon(Icons.edit_location_alt_rounded, color: Color(0xFF2E8B57)),
-                  title: const Text('Add manually', style: TextStyle(fontWeight: FontWeight.w600)),
+                  leading: const Icon(
+                    Icons.edit_location_alt_rounded,
+                    color: Color(0xFF2E8B57),
+                  ),
+                  title: const Text(
+                    'Add manually',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                   onTap: () {
                     Navigator.of(ctx).pop();
-                    Navigator.of(context).push(MaterialPageRoute<void>(builder: (context) => const AddressFormScreen()));
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) => const AddressFormScreen(),
+                      ),
+                    );
                   },
                 ),
               ],
@@ -702,48 +785,70 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     if (position == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Location permission denied or unavailable. Please use "Add address" instead.')),
+        const SnackBar(
+          content: Text(
+            'Location permission denied or unavailable. Please use "Add address" instead.',
+          ),
+        ),
       );
-      Navigator.of(context).push(MaterialPageRoute<void>(builder: (context) => const AddressFormScreen()));
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (context) => const AddressFormScreen(),
+        ),
+      );
       return;
     }
 
-    final addressStr = await LocationService.getAddressFromCoordinates(position.latitude, position.longitude);
-    
+    final addressStr = await LocationService.getAddressFromCoordinates(
+      position.latitude,
+      position.longitude,
+    );
+
     if (!mounted) return;
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Location Detected'),
-        content: Text('Detected Address:\n${addressStr ?? "Unknown Location"}\n\nLat: ${position.latitude.toStringAsFixed(4)}, Lng: ${position.longitude.toStringAsFixed(4)}'),
+        content: Text(
+          'Detected Address:\n${addressStr ?? "Unknown Location"}\n\nLat: ${position.latitude.toStringAsFixed(4)}, Lng: ${position.longitude.toStringAsFixed(4)}',
+        ),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.of(ctx).pop();
-              Navigator.of(context).push(MaterialPageRoute<void>(builder: (context) => const AddressFormScreen()));
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (context) => const AddressFormScreen(),
+                ),
+              );
             },
             child: const Text('Enter Manually'),
           ),
-              ElevatedButton(
-                onPressed: () async {
-                  final prefs = await SharedPreferences.getInstance();
-                  final address = CustomerAddress(
-                    name: 'Device User',
-                    mobile: prefs.getString('customer_mobile') ?? '',
-                    house: '',
-                    street: addressStr ?? '',
-                    city: 'CSN', // Default fallback
-                    pin: '',
-                    latitude: position.latitude,
-                    longitude: position.longitude,
-                  );
-                  await prefs.setString('customer_saved_address', jsonEncode(address.toJson()));
-                  if (!ctx.mounted) return;
-                  Navigator.of(ctx).pop();
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location saved successfully')));
-                },
-                child: const Text('Confirm'),
+          ElevatedButton(
+            onPressed: () async {
+              final prefs = await SharedPreferences.getInstance();
+              final address = CustomerAddress(
+                name: 'Device User',
+                mobile: prefs.getString('customer_mobile') ?? '',
+                house: '',
+                street: addressStr ?? '',
+                city: defaultCustomerCity,
+                pin: '',
+                latitude: position.latitude,
+                longitude: position.longitude,
+              );
+              await prefs.setString(
+                'customer_saved_address',
+                jsonEncode(address.toJson()),
+              );
+              if (!ctx.mounted) return;
+              Navigator.of(ctx).pop();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Location saved successfully')),
+              );
+            },
+            child: const Text('Confirm'),
           ),
         ],
       ),
@@ -761,26 +866,34 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       return;
     }
     setState(() {
-      final index = _cart.indexWhere((item) => item.fruitId == fruit.id || item.fruitName == fruit.name);
+      final index = _cart.indexWhere(
+        (item) => item.fruitId == fruit.id || item.fruitName == fruit.name,
+      );
       if (index == -1) {
-        _cart.add(CartItem(
-          fruitId: fruit.id,
-          fruitName: fruit.name,
-          fruitImage: fruit.image,
-          quantity: quantity,
-          pricePerKg: fruit.pricePerKg,
-        ));
+        _cart.add(
+          CartItem(
+            fruitId: fruit.id,
+            fruitName: fruit.name,
+            fruitImage: fruit.image,
+            quantity: quantity,
+            pricePerKg: fruit.pricePerKg,
+          ),
+        );
       } else {
         _cart[index].quantity += quantity;
       }
     });
 
     final total = quantity * fruit.pricePerKg;
-    final qtyFormatted = quantity % 1 == 0 ? quantity.toInt().toString() : quantity.toStringAsFixed(2);
+    final qtyFormatted = quantity % 1 == 0
+        ? quantity.toInt().toString()
+        : quantity.toStringAsFixed(2);
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Added $qtyFormatted kg of ${fruit.name} to cart (₹${total.toStringAsFixed(0)})'),
+        content: Text(
+          'Added $qtyFormatted kg of ${fruit.name} to cart (₹${total.toStringAsFixed(0)})',
+        ),
         duration: const Duration(seconds: 2),
         backgroundColor: const Color(0xFF2E8B57),
       ),
@@ -790,10 +903,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   void _openFruitDetail(FruitItem fruit) {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (context) => FruitDetailsPage(
-          fruit: fruit,
-          onAddToCart: _addToCart,
-        ),
+        builder: (context) =>
+            FruitDetailsPage(fruit: fruit, onAddToCart: _addToCart),
       ),
     );
   }
@@ -804,9 +915,11 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         builder: (context) => CustomerCartScreen(
           cart: List<CartItem>.from(_cart),
           onCartChanged: (updated) {
-            setState(() => _cart
-              ..clear()
-              ..addAll(updated));
+            setState(
+              () => _cart
+                ..clear()
+                ..addAll(updated),
+            );
           },
         ),
       ),
@@ -825,10 +938,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   Widget build(BuildContext context) {
     final filteredCatalog = _catalog.where((fruit) {
       final query = _searchController.text.trim().toLowerCase();
-      final matchesQuery = query.isEmpty ||
+      final matchesQuery =
+          query.isEmpty ||
           fruit.name.toLowerCase().contains(query) ||
           fruit.description.toLowerCase().contains(query);
-      final matchesCategory = _selectedCategory == 'All' || fruit.category == _selectedCategory;
+      final matchesCategory =
+          _selectedCategory == 'All' || fruit.category == _selectedCategory;
       return matchesQuery && matchesCategory;
     }).toList();
 
@@ -901,10 +1016,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               const SizedBox(height: 8),
               const Text(
                 'Fresh picks and daily essentials for you.',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFF5B6E5F),
-                ),
+                style: TextStyle(fontSize: 16, color: Color(0xFF5B6E5F)),
               ),
               const SizedBox(height: 18),
               Container(
@@ -942,7 +1054,11 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                         ],
                       ),
                     ),
-                    const Icon(Icons.local_florist_rounded, color: Colors.white, size: 34),
+                    const Icon(
+                      Icons.local_florist_rounded,
+                      color: Colors.white,
+                      size: 34,
+                    ),
                   ],
                 ),
               ),
@@ -952,10 +1068,16 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
                   hintText: 'Search fruits',
-                  prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF2E8B57)),
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    color: Color(0xFF2E8B57),
+                  ),
                   filled: true,
                   fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                     borderSide: BorderSide.none,
@@ -966,36 +1088,39 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
-                  children: [
-                    'All',
-                    'Fresh Fruits',
-                    'Best Offers',
-                    'Offers Today',
-                  ].map((cat) {
-                    final isSelected = _selectedCategory == cat;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(cat),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          if (selected) {
-                            setState(() => _selectedCategory = cat);
-                          }
-                        },
-                        selectedColor: const Color(0xFF2E8B57),
-                        backgroundColor: const Color(0xFFE9F7EC),
-                        labelStyle: TextStyle(
-                          color: isSelected ? Colors.white : const Color(0xFF2E8B57),
-                          fontWeight: FontWeight.w700,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        side: BorderSide.none,
-                      ),
-                    );
-                  }).toList(),
+                  children:
+                      [
+                        'All',
+                        'Fresh Fruits',
+                        'Best Offers',
+                        'Offers Today',
+                      ].map((cat) {
+                        final isSelected = _selectedCategory == cat;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(cat),
+                            selected: isSelected,
+                            onSelected: (selected) {
+                              if (selected) {
+                                setState(() => _selectedCategory = cat);
+                              }
+                            },
+                            selectedColor: const Color(0xFF2E8B57),
+                            backgroundColor: const Color(0xFFE9F7EC),
+                            labelStyle: TextStyle(
+                              color: isSelected
+                                  ? Colors.white
+                                  : const Color(0xFF2E8B57),
+                              fontWeight: FontWeight.w700,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            side: BorderSide.none,
+                          ),
+                        );
+                      }).toList(),
                 ),
               ),
               const SizedBox(height: 16),
@@ -1081,7 +1206,9 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                 children: [
                   TextField(
                     controller: controller,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     decoration: InputDecoration(
                       labelText: 'Quantity in kg',
                       suffixText: 'kg',
@@ -1149,7 +1276,9 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                           final item = _cart[index];
                           final qtyStr = item.quantity % 1 == 0
                               ? item.quantity.toInt().toString()
-                              : item.quantity.toStringAsFixed(2).replaceAll(RegExp(r'\.?0+$'), '');
+                              : item.quantity
+                                    .toStringAsFixed(2)
+                                    .replaceAll(RegExp(r'\.?0+$'), '');
                           return Container(
                             margin: const EdgeInsets.only(bottom: 12),
                             padding: const EdgeInsets.all(14),
@@ -1168,31 +1297,52 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                             width: 54,
                                             height: 54,
                                             fit: BoxFit.cover,
-                                            errorBuilder: (context, error, stackTrace) => Container(
-                                              width: 54,
-                                              height: 54,
-                                              color: const Color(0xFFE9F7EC),
-                                              child: const Icon(Icons.apple_rounded, color: Color(0xFF2E8B57), size: 28),
-                                            ),
+                                            errorBuilder:
+                                                (context, error, stackTrace) =>
+                                                    Container(
+                                                      width: 54,
+                                                      height: 54,
+                                                      color: const Color(
+                                                        0xFFE9F7EC,
+                                                      ),
+                                                      child: const Icon(
+                                                        Icons.apple_rounded,
+                                                        color: Color(
+                                                          0xFF2E8B57,
+                                                        ),
+                                                        size: 28,
+                                                      ),
+                                                    ),
                                           )
                                         : Image.asset(
                                             item.fruitImage,
                                             width: 54,
                                             height: 54,
                                             fit: BoxFit.cover,
-                                            errorBuilder: (context, error, stackTrace) => Container(
-                                              width: 54,
-                                              height: 54,
-                                              color: const Color(0xFFE9F7EC),
-                                              child: const Icon(Icons.apple_rounded, color: Color(0xFF2E8B57), size: 28),
-                                            ),
+                                            errorBuilder:
+                                                (context, error, stackTrace) =>
+                                                    Container(
+                                                      width: 54,
+                                                      height: 54,
+                                                      color: const Color(
+                                                        0xFFE9F7EC,
+                                                      ),
+                                                      child: const Icon(
+                                                        Icons.apple_rounded,
+                                                        color: Color(
+                                                          0xFF2E8B57,
+                                                        ),
+                                                        size: 28,
+                                                      ),
+                                                    ),
                                           ),
                                   ),
                                   const SizedBox(width: 12),
                                 ],
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         item.fruitName,
@@ -1218,19 +1368,27 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                       onPressed: () {
                                         setState(() {
                                           if (item.quantity > 0.5) {
-                                            item.quantity = double.parse((item.quantity - 0.5).toStringAsFixed(2));
+                                            item.quantity = double.parse(
+                                              (item.quantity - 0.5)
+                                                  .toStringAsFixed(2),
+                                            );
                                           } else {
                                             _cart.removeAt(index);
                                           }
                                         });
                                         _updateCart();
                                       },
-                                      icon: const Icon(Icons.remove_circle_outline),
+                                      icon: const Icon(
+                                        Icons.remove_circle_outline,
+                                      ),
                                     ),
                                     InkWell(
                                       onTap: () => _editQuantityModal(item),
                                       child: Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 4,
+                                        ),
                                         child: Text(
                                           '$qtyStr kg',
                                           style: const TextStyle(
@@ -1244,11 +1402,16 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                                     IconButton(
                                       onPressed: () {
                                         setState(() {
-                                          item.quantity = double.parse((item.quantity + 0.5).toStringAsFixed(2));
+                                          item.quantity = double.parse(
+                                            (item.quantity + 0.5)
+                                                .toStringAsFixed(2),
+                                          );
                                         });
                                         _updateCart();
                                       },
-                                      icon: const Icon(Icons.add_circle_outline),
+                                      icon: const Icon(
+                                        Icons.add_circle_outline,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -1316,7 +1479,17 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
                           : () {
                               Navigator.of(context).push(
                                 MaterialPageRoute<void>(
-                                  builder: (context) => CheckoutScreen(cart: _cart),
+                                  builder: (context) => CheckoutScreen(
+                                    cart: _cart,
+                                    onCartChanged: (updated) {
+                                      setState(() {
+                                        _cart
+                                          ..clear()
+                                          ..addAll(updated);
+                                      });
+                                      _updateCart();
+                                    },
+                                  ),
                                 ),
                               );
                             },
@@ -1330,21 +1503,155 @@ class _CustomerCartScreenState extends State<CustomerCartScreen> {
 }
 
 class CheckoutScreen extends StatefulWidget {
-  const CheckoutScreen({required this.cart, super.key});
+  const CheckoutScreen({
+    required this.cart,
+    required this.onCartChanged,
+    super.key,
+  });
 
   final List<CartItem> cart;
+  final ValueChanged<List<CartItem>> onCartChanged;
 
   @override
   State<CheckoutScreen> createState() => _CheckoutScreenState();
 }
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
+  bool _isCreatingOrder = false;
+
+  Future<void> _placeOrder(
+    CustomerAddress address,
+    String paymentMethod,
+  ) async {
+    if (_isCreatingOrder) return;
+    if (widget.cart.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Your cart is empty.')));
+      return;
+    }
+    if (paymentMethod != 'Cash on Delivery (COD)') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Online payment verification is unavailable. No order was placed.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final latitude = address.latitude;
+    final longitude = address.longitude;
+    if (latitude == null || longitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'A valid delivery location is required to place an order.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isCreatingOrder = true);
+    final availability =
+        await DeliveryAvailabilityService.checkDeliveryAvailability(
+          customerLat: latitude,
+          customerLng: longitude,
+        );
+    if (!mounted) return;
+    if (!availability.isAvailable) {
+      setState(() => _isCreatingOrder = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(availability.message)));
+      return;
+    }
+
+    final orderTime = DateTime.now();
+    final orderSuffix = orderTime.millisecondsSinceEpoch.toString();
+    final deliveryAddress = [
+      address.name,
+      address.house,
+      address.street,
+      address.landmark ?? '',
+      address.city,
+      address.pin,
+      address.mobile,
+    ].where((part) => part.trim().isNotEmpty).join(', ');
+    final orderedItems = List<CartItem>.from(widget.cart);
+    final orders = [
+      for (var index = 0; index < orderedItems.length; index++)
+        CustomerOrder(
+          orderId:
+              'JFS-ORD-${orderSuffix.substring(orderSuffix.length - 7)}-${index + 1}',
+          orderDateTime: orderTime,
+          fruitName: orderedItems[index].fruitName,
+          fruitImage: orderedItems[index].fruitImage,
+          quantity: orderedItems[index].quantity,
+          pricePerKg: orderedItems[index].pricePerKg,
+          totalAmount: orderedItems[index].subtotal,
+          paymentMethod: paymentMethod,
+          deliveryAddress: deliveryAddress,
+          status: 'Order Placed',
+        ),
+    ];
+
+    try {
+      await OrderStorageService.saveOrders(orders);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isCreatingOrder = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save the order: $error')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    widget.cart.clear();
+    widget.onCartChanged(const []);
+    Navigator.of(context).pop();
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (context) => OrderConfirmationScreen(
+          orderTotal: orders.fold(0.0, (sum, order) => sum + order.totalAmount),
+          deliveryMethod: 'Home Delivery',
+          paymentMethod: paymentMethod,
+          orderItems: orderedItems,
+          deliveryAddress: deliveryAddress,
+          orderIds: orders.map((order) => order.orderId).toList(),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CartDeliveryAddressScreen(
+      cart: widget.cart,
+      onPlaceOrder: _placeOrder,
+    );
+  }
+}
+
+class LegacyCheckoutScreen extends StatefulWidget {
+  const LegacyCheckoutScreen({required this.cart, super.key});
+
+  final List<CartItem> cart;
+
+  @override
+  State<LegacyCheckoutScreen> createState() => _LegacyCheckoutScreenState();
+}
+
+class _LegacyCheckoutScreenState extends State<LegacyCheckoutScreen> {
   final _formKey = GlobalKey<FormState>();
   final _fullNameController = TextEditingController();
   final _mobileController = TextEditingController();
   final _houseController = TextEditingController();
   final _areaController = TextEditingController();
-  final _cityController = TextEditingController(text: 'Chhatrapati Sambhajinagar');
+  final _cityController = TextEditingController(
+    text: defaultCustomerCity,
+  );
   final _pinController = TextEditingController();
 
   String _deliveryMethod = 'Self Pickup';
@@ -1352,7 +1659,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String _distanceOption = 'Nearby area';
   bool _showCityError = false;
 
-  double get itemsSubtotal => widget.cart.fold(0.0, (sum, item) => sum + item.subtotal);
+  double get itemsSubtotal =>
+      widget.cart.fold(0.0, (sum, item) => sum + item.subtotal);
 
   double get deliveryCharge {
     if (_deliveryMethod == 'Self Pickup') {
@@ -1377,7 +1685,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   bool get isValidCity {
     final city = _cityController.text.trim();
-    return city == 'Chhatrapati Sambhajinagar' || city == 'CSN';
+    return city == defaultCustomerCity;
   }
 
   String? _cityValidator(String? value) {
@@ -1385,8 +1693,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       return null;
     }
     final enteredCity = value?.trim() ?? '';
-    if (enteredCity != 'Chhatrapati Sambhajinagar' && enteredCity != 'CSN') {
-      return 'Home delivery is currently available only in Chhatrapati Sambhajinagar.';
+    if (enteredCity != defaultCustomerCity) {
+      return 'Home delivery is currently available only in $defaultCustomerCity.';
     }
     return null;
   }
@@ -1398,7 +1706,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       setState(() => _showCityError = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Home delivery is currently available only in Chhatrapati Sambhajinagar.'),
+          content: Text(
+            'Home delivery is currently available only in $defaultCustomerCity.',
+          ),
         ),
       );
       return;
@@ -1417,7 +1727,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           orderItems: widget.cart,
           deliveryAddress: _deliveryMethod == 'Home Delivery'
               ? '${_houseController.text}, ${_areaController.text}, ${_cityController.text} - ${_pinController.text}'
-              : 'Jayraj Fruit Seller, City Centre, Chhatrapati Sambhajinagar',
+              : 'Jayraj Fruit Seller, City Centre, $defaultCustomerCity',
         ),
       ),
     );
@@ -1446,7 +1756,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         child: Row(
           children: [
             Icon(
-              isSelected ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+              isSelected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_unchecked_rounded,
               color: isSelected ? const Color(0xFF2E8B57) : Colors.grey[400],
             ),
             const SizedBox(width: 12),
@@ -1505,27 +1817,47 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     children: [
                       TextFormField(
                         controller: _fullNameController,
-                        decoration: const InputDecoration(labelText: 'Full Name'),
-                        validator: (value) => value == null || value.trim().isEmpty ? 'Please enter your full name' : null,
+                        decoration: const InputDecoration(
+                          labelText: 'Full Name',
+                        ),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                            ? 'Please enter your full name'
+                            : null,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: _mobileController,
                         keyboardType: TextInputType.phone,
-                        decoration: const InputDecoration(labelText: 'Mobile Number'),
-                        validator: (value) => value == null || value.trim().isEmpty ? 'Please enter your mobile number' : null,
+                        decoration: const InputDecoration(
+                          labelText: 'Mobile Number',
+                        ),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                            ? 'Please enter your mobile number'
+                            : null,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: _houseController,
-                        decoration: const InputDecoration(labelText: 'House/Flat No.'),
-                        validator: (value) => value == null || value.trim().isEmpty ? 'Please enter house/flat number' : null,
+                        decoration: const InputDecoration(
+                          labelText: 'House/Flat No.',
+                        ),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                            ? 'Please enter house/flat number'
+                            : null,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: _areaController,
-                        decoration: const InputDecoration(labelText: 'Area/Street'),
-                        validator: (value) => value == null || value.trim().isEmpty ? 'Please enter area or street' : null,
+                        decoration: const InputDecoration(
+                          labelText: 'Area/Street',
+                        ),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                            ? 'Please enter area or street'
+                            : null,
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
@@ -1533,11 +1865,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         decoration: const InputDecoration(labelText: 'City'),
                         validator: _cityValidator,
                       ),
-                      if (_showCityError || (_deliveryMethod == 'Home Delivery' && !isValidCity && _cityController.text.trim().isNotEmpty))
+                      if (_showCityError ||
+                          (_deliveryMethod == 'Home Delivery' &&
+                              !isValidCity &&
+                              _cityController.text.trim().isNotEmpty))
                         Padding(
                           padding: const EdgeInsets.only(top: 8),
                           child: Text(
-                            'Home delivery is currently available only in Chhatrapati Sambhajinagar.',
+                            'Home delivery is currently available only in $defaultCustomerCity.',
                             style: TextStyle(
                               color: Colors.red[700],
                               fontWeight: FontWeight.w600,
@@ -1548,20 +1883,41 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       TextFormField(
                         controller: _pinController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'PIN Code'),
-                        validator: (value) => value == null || value.trim().isEmpty ? 'Please enter PIN code' : null,
+                        decoration: const InputDecoration(
+                          labelText: 'PIN Code',
+                        ),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                            ? 'Please enter PIN code'
+                            : null,
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         initialValue: _distanceOption,
-                        decoration: const InputDecoration(labelText: 'Distance'),
+                        decoration: const InputDecoration(
+                          labelText: 'Distance',
+                        ),
                         items: const [
-                          DropdownMenuItem(value: 'Nearby area', child: Text('Nearby area')),
-                          DropdownMenuItem(value: '3–5 km', child: Text('3–5 km')),
-                          DropdownMenuItem(value: '5–10 km', child: Text('5–10 km')),
-                          DropdownMenuItem(value: '10+ km', child: Text('10+ km')),
+                          DropdownMenuItem(
+                            value: 'Nearby area',
+                            child: Text('Nearby area'),
+                          ),
+                          DropdownMenuItem(
+                            value: '3–5 km',
+                            child: Text('3–5 km'),
+                          ),
+                          DropdownMenuItem(
+                            value: '5–10 km',
+                            child: Text('5–10 km'),
+                          ),
+                          DropdownMenuItem(
+                            value: '10+ km',
+                            child: Text('10+ km'),
+                          ),
                         ],
-                        onChanged: (value) => setState(() => _distanceOption = value ?? 'Nearby area'),
+                        onChanged: (value) => setState(
+                          () => _distanceOption = value ?? 'Nearby area',
+                        ),
                       ),
                     ],
                   ),
@@ -1588,7 +1944,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       ),
                       SizedBox(height: 8),
                       Text('Jayraj Fruit Seller'),
-                      Text('City Centre, Chhatrapati Sambhajinagar'),
+                      Text('City Centre, $defaultCustomerCity'),
                     ],
                   ),
                 ),
@@ -1622,31 +1978,43 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ),
                 child: Column(
                   children: [
-                    _SummaryRow(label: 'Items subtotal', value: '₹${itemsSubtotal.toStringAsFixed(0)}'),
-                    _SummaryRow(label: 'Delivery charge', value: '₹${deliveryCharge.toStringAsFixed(0)}'),
+                    _SummaryRow(
+                      label: 'Items subtotal',
+                      value: '₹${itemsSubtotal.toStringAsFixed(0)}',
+                    ),
+                    _SummaryRow(
+                      label: 'Delivery charge',
+                      value: '₹${deliveryCharge.toStringAsFixed(0)}',
+                    ),
                     const Divider(),
-                    _SummaryRow(label: 'Final total', value: '₹${finalTotal.toStringAsFixed(0)}', isBold: true),
+                    _SummaryRow(
+                      label: 'Final total',
+                      value: '₹${finalTotal.toStringAsFixed(0)}',
+                      isBold: true,
+                    ),
                     const SizedBox(height: 8),
-                    _SummaryRow(label: 'Delivery method', value: _deliveryMethod),
+                    _SummaryRow(
+                      label: 'Delivery method',
+                      value: _deliveryMethod,
+                    ),
                     _SummaryRow(label: 'Payment method', value: _paymentMethod),
                     if (_deliveryMethod == 'Home Delivery')
                       _SummaryRow(
                         label: 'Address',
-                        value: '${_houseController.text}, ${_areaController.text}, ${_cityController.text}',
+                        value:
+                            '${_houseController.text}, ${_areaController.text}, ${_cityController.text}',
                       )
                     else
                       _SummaryRow(
                         label: 'Pickup address',
-                        value: 'Jayraj Fruit Seller, City Centre, CSN',
+                        value:
+                            'Jayraj Fruit Seller, City Centre, $defaultCustomerCity',
                       ),
                   ],
                 ),
               ),
               const SizedBox(height: 20),
-              FruitPrimaryButton(
-                label: 'Place Order',
-                onPressed: _placeOrder,
-              ),
+              FruitPrimaryButton(label: 'Place Order', onPressed: _placeOrder),
             ],
           ),
         ),
@@ -1707,6 +2075,7 @@ class OrderConfirmationScreen extends StatelessWidget {
     required this.paymentMethod,
     required this.orderItems,
     required this.deliveryAddress,
+    this.orderIds = const [],
     super.key,
   });
 
@@ -1715,6 +2084,7 @@ class OrderConfirmationScreen extends StatelessWidget {
   final String paymentMethod;
   final List<CartItem> orderItems;
   final String deliveryAddress;
+  final List<String> orderIds;
 
   @override
   Widget build(BuildContext context) {
@@ -1741,10 +2111,7 @@ class OrderConfirmationScreen extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 'Order total: ₹${orderTotal.toStringAsFixed(0)}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  color: Color(0xFF5B6E5F),
-                ),
+                style: const TextStyle(fontSize: 18, color: Color(0xFF5B6E5F)),
               ),
               const SizedBox(height: 24),
               Container(
@@ -1756,7 +2123,12 @@ class OrderConfirmationScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _SummaryRow(label: 'Delivery method', value: deliveryMethod),
+                    for (final orderId in orderIds)
+                      _SummaryRow(label: 'Order ID', value: orderId),
+                    _SummaryRow(
+                      label: 'Delivery method',
+                      value: deliveryMethod,
+                    ),
                     _SummaryRow(label: 'Payment method', value: paymentMethod),
                     _SummaryRow(label: 'Address', value: deliveryAddress),
                     const SizedBox(height: 12),
@@ -1835,10 +2207,7 @@ class SellerLoginScreen extends StatelessWidget {
                 const SizedBox(height: 8),
                 const Text(
                   'Access your seller dashboard securely.',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Color(0xFF5B6E5F),
-                  ),
+                  style: TextStyle(fontSize: 16, color: Color(0xFF5B6E5F)),
                 ),
                 const SizedBox(height: 28),
                 const FruitInputField(
@@ -1987,16 +2356,28 @@ class SellerDashboardScreen extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: const [
-                        Text('Sales', style: TextStyle(color: Color(0xFF5B6E5F))),
-                        Text('₹8,400', style: TextStyle(fontWeight: FontWeight.w800)),
+                        Text(
+                          'Sales',
+                          style: TextStyle(color: Color(0xFF5B6E5F)),
+                        ),
+                        Text(
+                          '₹8,400',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: const [
-                        Text('New customers', style: TextStyle(color: Color(0xFF5B6E5F))),
-                        Text('12', style: TextStyle(fontWeight: FontWeight.w800)),
+                        Text(
+                          'New customers',
+                          style: TextStyle(color: Color(0xFF5B6E5F)),
+                        ),
+                        Text(
+                          '12',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
                       ],
                     ),
                   ],
@@ -2043,7 +2424,10 @@ class SellerDashboardScreen extends StatelessWidget {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFE9F7EC),
                           borderRadius: BorderRadius.circular(999),
@@ -2074,7 +2458,10 @@ class SellerDashboardScreen extends StatelessWidget {
               ..._inventory.map(
                 (item) => Container(
                   margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
@@ -2132,10 +2519,7 @@ class FruitPrimaryButton extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-          ),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         child: Text(label),
       ),
@@ -2178,7 +2562,10 @@ class FruitInputField extends StatelessWidget {
             prefixIcon: Icon(icon, color: const Color(0xFF2E8B57)),
             filled: true,
             fillColor: Colors.white,
-            contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+            contentPadding: const EdgeInsets.symmetric(
+              vertical: 18,
+              horizontal: 16,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
               borderSide: BorderSide.none,
@@ -2189,7 +2576,10 @@ class FruitInputField extends StatelessWidget {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide: const BorderSide(color: Color(0xFF2E8B57), width: 1.5),
+              borderSide: const BorderSide(
+                color: Color(0xFF2E8B57),
+                width: 1.5,
+              ),
             ),
           ),
         ),
@@ -2223,10 +2613,7 @@ class DashboardStatCard extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Color(0xFF5B6E5F),
-            ),
+            style: const TextStyle(fontSize: 14, color: Color(0xFF5B6E5F)),
           ),
           const SizedBox(height: 8),
           Text(

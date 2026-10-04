@@ -40,7 +40,7 @@ class DeliveryAvailabilityService {
     } else {
       return (
         isAvailable: false,
-        message: 'Delivery is not available for this location.',
+        message: 'Delivery is unavailable at this address. The delivery limit is 15 km.',
       );
     }
   }

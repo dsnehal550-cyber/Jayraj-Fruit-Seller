@@ -55,10 +55,7 @@ class DirectOrderConfirmationScreen extends StatelessWidget {
       );
     }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: imgWidget,
-    );
+    return ClipRRect(borderRadius: BorderRadius.circular(16), child: imgWidget);
   }
 
   @override
@@ -156,7 +153,10 @@ class DirectOrderConfirmationScreen extends StatelessWidget {
                 child: Column(
                   children: [
                     _buildDetailRow('Fruit Name', fruit.name),
-                    _buildDetailRow('Price per kg', '₹${fruit.pricePerKg.toStringAsFixed(0)}'),
+                    _buildDetailRow(
+                      'Price per kg',
+                      '₹${fruit.pricePerKg.toStringAsFixed(0)}',
+                    ),
                     _buildDetailRow('Quantity', '$qtyStr kg'),
                     const Divider(height: 24),
                     _buildDetailRow(
@@ -177,7 +177,7 @@ class DirectOrderConfirmationScreen extends StatelessWidget {
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (context) => DirectPaymentScreen(
+                        builder: (context) => DirectDeliveryAddressScreen(
                           fruit: fruit,
                           quantity: quantity,
                           total: total,
@@ -193,7 +193,7 @@ class DirectOrderConfirmationScreen extends StatelessWidget {
                     ),
                   ),
                   child: const Text(
-                    'CONFIRM ORDER',
+                    'CONTINUE TO DELIVERY ADDRESS',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                   ),
                 ),
@@ -205,7 +205,12 @@ class DirectOrderConfirmationScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailRow(String label, String value, {bool isBold = false, Color? color}) {
+  Widget _buildDetailRow(
+    String label,
+    String value, {
+    bool isBold = false,
+    Color? color,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -238,12 +243,14 @@ class DirectPaymentScreen extends StatefulWidget {
     required this.fruit,
     required this.quantity,
     required this.total,
+    required this.address,
     super.key,
   });
 
   final FruitItem fruit;
   final double quantity;
   final double total;
+  final CustomerAddress address;
 
   @override
   State<DirectPaymentScreen> createState() => _DirectPaymentScreenState();
@@ -252,6 +259,7 @@ class DirectPaymentScreen extends StatefulWidget {
 class _DirectPaymentScreenState extends State<DirectPaymentScreen> {
   String _selectedMainCategory = 'Online Payment';
   String? _selectedOnlineSubOption = 'PhonePe';
+  bool _isPlacingOrder = false;
 
   String get _finalPaymentMethodString {
     if (_selectedMainCategory == 'Cash on Delivery') {
@@ -269,24 +277,107 @@ class _DirectPaymentScreenState extends State<DirectPaymentScreen> {
     }
   }
 
-  void _onContinue() {
-    if (_selectedMainCategory == 'Online Payment' && _selectedOnlineSubOption == null) {
+  Future<void> _onContinue() async {
+    if (_isPlacingOrder) return;
+    if (_selectedMainCategory == 'Online Payment' &&
+        _selectedOnlineSubOption == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please select an online payment option (PhonePe, GPay, or UPI QR Code).'),
+          content: Text(
+            'Please select an online payment option (PhonePe, GPay, or UPI QR Code).',
+          ),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
 
-    Navigator.of(context).push(
+    if (_selectedMainCategory != 'Cash on Delivery') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Online payment verification is not configured. No order was placed.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final latitude = widget.address.latitude;
+    final longitude = widget.address.longitude;
+    if (latitude == null || longitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The delivery location is missing. Please update the address.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isPlacingOrder = true);
+    final availability =
+        await DeliveryAvailabilityService.checkDeliveryAvailability(
+          customerLat: latitude,
+          customerLng: longitude,
+        );
+    if (!mounted) return;
+    if (!availability.isAvailable) {
+      setState(() => _isPlacingOrder = false);
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Delivery Unavailable'),
+          content: Text(availability.message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final finalAddress = widget.address.toFormattedString();
+    final orderId =
+        'JFS-ORD-${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}';
+    final newOrder = CustomerOrder(
+      orderId: orderId,
+      orderDateTime: DateTime.now(),
+      fruitName: widget.fruit.name,
+      fruitImage: widget.fruit.image,
+      quantity: widget.quantity,
+      pricePerKg: widget.fruit.pricePerKg,
+      totalAmount: widget.total,
+      paymentMethod: _finalPaymentMethodString,
+      deliveryAddress: finalAddress,
+      status: 'Order Placed',
+    );
+
+    try {
+      await OrderStorageService.saveOrder(newOrder);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isPlacingOrder = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save the order: $error')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
-        builder: (context) => DirectDeliveryAddressScreen(
+        builder: (context) => DirectOrderSuccessScreen(
           fruit: widget.fruit,
           quantity: widget.quantity,
           total: widget.total,
           paymentMethod: _finalPaymentMethodString,
+          deliveryAddress: finalAddress,
+          orderId: orderId,
         ),
       ),
     );
@@ -360,7 +451,8 @@ class _DirectPaymentScreenState extends State<DirectPaymentScreen> {
                       _buildSubOptionTile(
                         key: const Key('online_sub_phonepe'),
                         title: 'PhonePe',
-                        subtitle: 'Instant simulated payment via PhonePe',
+                        subtitle:
+                            'Payment provider integration is not configured',
                         icon: Icons.flash_on_rounded,
                         accentColor: const Color(0xFF5F259F),
                         value: 'PhonePe',
@@ -370,7 +462,8 @@ class _DirectPaymentScreenState extends State<DirectPaymentScreen> {
                       _buildSubOptionTile(
                         key: const Key('online_sub_gpay'),
                         title: 'Google Pay (GPay)',
-                        subtitle: 'Instant simulated payment via Google Pay',
+                        subtitle:
+                            'Payment provider integration is not configured',
                         icon: Icons.payment_rounded,
                         accentColor: const Color(0xFF4285F4),
                         value: 'GPay',
@@ -395,10 +488,14 @@ class _DirectPaymentScreenState extends State<DirectPaymentScreen> {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFF2E8B57), width: 1.5),
+                            border: Border.all(
+                              color: const Color(0xFF2E8B57),
+                              width: 1.5,
+                            ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF2E8B57).withValues(alpha: 0.08),
+                                color: const Color(0xFF2E8B57)
+                                    .withValues(alpha: 0.08),
                                 blurRadius: 12,
                                 offset: const Offset(0, 4),
                               ),
@@ -435,13 +532,16 @@ class _DirectPaymentScreenState extends State<DirectPaymentScreen> {
                               ),
                               const SizedBox(height: 12),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFFFF3CD),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: const Text(
-                                  'Demo QR Code for simulation only. Do not scan with real banking app.',
+                                  'This is a visual placeholder, not a payment QR code.',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 12,
@@ -487,7 +587,7 @@ class _DirectPaymentScreenState extends State<DirectPaymentScreen> {
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Note: All payment selections operate in local demo mode.',
+                        'Online payment options require verified provider integration before an order can be placed.',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -504,7 +604,7 @@ class _DirectPaymentScreenState extends State<DirectPaymentScreen> {
                 height: 54,
                 child: ElevatedButton(
                   key: const Key('continue_to_address_button'),
-                  onPressed: _onContinue,
+                  onPressed: _isPlacingOrder ? null : _onContinue,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF2E8B57),
                     foregroundColor: Colors.white,
@@ -512,10 +612,22 @@ class _DirectPaymentScreenState extends State<DirectPaymentScreen> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: const Text(
-                    'Continue to Delivery Address',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                  ),
+                  child: _isPlacingOrder
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text(
+                          'Place Order',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                 ),
               ),
             ],
@@ -549,7 +661,9 @@ class _DirectPaymentScreenState extends State<DirectPaymentScreen> {
         child: Row(
           children: [
             Icon(
-              isSelected ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+              isSelected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_unchecked_rounded,
               color: isSelected ? const Color(0xFF2E8B57) : Colors.grey[400],
             ),
             const SizedBox(width: 14),
@@ -606,7 +720,9 @@ class _DirectPaymentScreenState extends State<DirectPaymentScreen> {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? accentColor.withValues(alpha: 0.08) : Colors.white,
+          color: isSelected
+              ? accentColor.withValues(alpha: 0.08)
+              : Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isSelected ? accentColor : Colors.grey[300]!,
@@ -616,7 +732,9 @@ class _DirectPaymentScreenState extends State<DirectPaymentScreen> {
         child: Row(
           children: [
             Icon(
-              isSelected ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+              isSelected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_unchecked_rounded,
               color: isSelected ? accentColor : Colors.grey[400],
               size: 20,
             ),
@@ -658,20 +776,20 @@ class DirectDeliveryAddressScreen extends StatefulWidget {
     required this.fruit,
     required this.quantity,
     required this.total,
-    required this.paymentMethod,
     super.key,
   });
 
   final FruitItem fruit;
   final double quantity;
   final double total;
-  final String paymentMethod;
 
   @override
-  State<DirectDeliveryAddressScreen> createState() => _DirectDeliveryAddressScreenState();
+  State<DirectDeliveryAddressScreen> createState() =>
+      _DirectDeliveryAddressScreenState();
 }
 
-class _DirectDeliveryAddressScreenState extends State<DirectDeliveryAddressScreen> {
+class _DirectDeliveryAddressScreenState
+    extends State<DirectDeliveryAddressScreen> {
   bool _isSubmitting = false;
   CustomerAddress? _savedAddress;
   bool _isLoadingAddress = true;
@@ -696,11 +814,13 @@ class _DirectDeliveryAddressScreenState extends State<DirectDeliveryAddressScree
     setState(() => _isLoadingAddress = false);
   }
 
-  Future<void> _placeOrder() async {
+  Future<void> _continueToPayment() async {
     if (_isSubmitting) return;
 
     if (_savedAddress == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please add a delivery address')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add a delivery address')),
+      );
       return;
     }
 
@@ -710,17 +830,33 @@ class _DirectDeliveryAddressScreenState extends State<DirectDeliveryAddressScree
     final lat = _savedAddress!.latitude;
     final lng = _savedAddress!.longitude;
 
-    if (lat == null || lng == null) {
+    if (lat == null ||
+        lng == null ||
+        !lat.isFinite ||
+        !lng.isFinite ||
+        lat < -90 ||
+        lat > 90 ||
+        lng < -180 ||
+        lng > 180) {
       setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location missing. Please update your address.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Location missing or invalid. Update your address and select a delivery location.',
+          ),
+        ),
+      );
       return;
     }
 
-    final availability = await DeliveryAvailabilityService.checkDeliveryAvailability(customerLat: lat, customerLng: lng);
-
+    final availability =
+        await DeliveryAvailabilityService.checkDeliveryAvailability(
+          customerLat: lat,
+          customerLng: lng,
+        );
+    if (!mounted) return;
     if (!availability.isAvailable) {
       setState(() => _isSubmitting = false);
-      if (!mounted) return;
       showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -737,38 +873,17 @@ class _DirectDeliveryAddressScreenState extends State<DirectDeliveryAddressScree
       return;
     }
 
-    final finalAddress = _savedAddress!.toFormattedString();
-    final orderId = 'JFS-ORD-${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}';
-    
-    final newOrder = CustomerOrder(
-      orderId: orderId,
-      orderDateTime: DateTime.now(),
-      fruitName: widget.fruit.name,
-      fruitImage: widget.fruit.image,
-      quantity: widget.quantity,
-      pricePerKg: widget.fruit.pricePerKg,
-      totalAmount: widget.total, // Delivery is 0, so total is untouched.
-      paymentMethod: widget.paymentMethod,
-      deliveryAddress: finalAddress,
-      status: 'Order Placed',
-    );
-
-    await OrderStorageService.saveOrder(newOrder);
-
-    if (!mounted) return;
-
-    Navigator.of(context).pushReplacement(
+    await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (context) => DirectOrderSuccessScreen(
+        builder: (context) => DirectPaymentScreen(
           fruit: widget.fruit,
           quantity: widget.quantity,
           total: widget.total,
-          paymentMethod: widget.paymentMethod,
-          deliveryAddress: finalAddress,
-          orderId: orderId,
+          address: _savedAddress!,
         ),
       ),
     );
+    if (mounted) setState(() => _isSubmitting = false);
   }
 
   @override
@@ -782,7 +897,9 @@ class _DirectDeliveryAddressScreenState extends State<DirectDeliveryAddressScree
       backgroundColor: const Color(0xFFF5F7F2),
       body: SafeArea(
         child: _isLoadingAddress
-            ? const Center(child: CircularProgressIndicator(color: Color(0xFF2E8B57)))
+            ? const Center(
+                child: CircularProgressIndicator(color: Color(0xFF2E8B57)),
+              )
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
                 child: Column(
@@ -834,22 +951,35 @@ class _DirectDeliveryAddressScreenState extends State<DirectDeliveryAddressScree
                                 const Spacer(),
                                 TextButton(
                                   onPressed: () async {
-                                    final updated = await Navigator.of(context).push<CustomerAddress>(
-                                      MaterialPageRoute(builder: (context) => const AddressFormScreen()),
-                                    );
+                                    final updated = await Navigator.of(context)
+                                        .push<CustomerAddress>(
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                AddressFormScreen(
+                                                  initialAddress: _savedAddress,
+                                                ),
+                                          ),
+                                        );
                                     if (updated != null) {
                                       setState(() => _savedAddress = updated);
                                     }
                                   },
                                   child: const Text('Edit'),
-                                )
+                                ),
                               ],
                             ),
                             Padding(
-                              padding: const EdgeInsets.only(left: 32, top: 4, bottom: 8),
+                              padding: const EdgeInsets.only(
+                                left: 32,
+                                top: 4,
+                                bottom: 8,
+                              ),
                               child: Text(
                                 _savedAddress!.toFormattedString(),
-                                style: const TextStyle(fontSize: 14, color: Color(0xFF5B6E5F)),
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF5B6E5F),
+                                ),
                               ),
                             ),
                           ],
@@ -866,15 +996,29 @@ class _DirectDeliveryAddressScreenState extends State<DirectDeliveryAddressScree
                         ),
                         child: Column(
                           children: [
-                            const Icon(Icons.location_off_rounded, size: 48, color: Colors.grey),
+                            const Icon(
+                              Icons.location_off_rounded,
+                              size: 48,
+                              color: Colors.grey,
+                            ),
                             const SizedBox(height: 12),
-                            const Text('No address saved', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                            const Text(
+                              'No address saved',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                             const SizedBox(height: 16),
                             ElevatedButton.icon(
                               onPressed: () async {
-                                final newAddress = await Navigator.of(context).push<CustomerAddress>(
-                                  MaterialPageRoute(builder: (context) => const AddressFormScreen()),
-                                );
+                                final newAddress = await Navigator.of(context)
+                                    .push<CustomerAddress>(
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            const AddressFormScreen(),
+                                      ),
+                                    );
                                 if (newAddress != null) {
                                   setState(() => _savedAddress = newAddress);
                                 }
@@ -885,7 +1029,7 @@ class _DirectDeliveryAddressScreenState extends State<DirectDeliveryAddressScree
                                 backgroundColor: const Color(0xFF2E8B57),
                                 foregroundColor: Colors.white,
                               ),
-                            )
+                            ),
                           ],
                         ),
                       ),
@@ -896,7 +1040,7 @@ class _DirectDeliveryAddressScreenState extends State<DirectDeliveryAddressScree
                       height: 54,
                       child: ElevatedButton(
                         key: const Key('place_order_button'),
-                        onPressed: _isSubmitting ? null : _placeOrder,
+                        onPressed: _isSubmitting ? null : _continueToPayment,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2E8B57),
                           disabledBackgroundColor: Colors.grey[400],
@@ -906,8 +1050,13 @@ class _DirectDeliveryAddressScreenState extends State<DirectDeliveryAddressScree
                           ),
                         ),
                         child: Text(
-                          _isSubmitting ? 'Checking Availability...' : 'PLACE ORDER',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                          _isSubmitting
+                              ? 'Checking Availability...'
+                              : 'CHECK DELIVERY & CONTINUE TO PAYMENT',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ),
@@ -1001,9 +1150,16 @@ class DirectOrderSuccessScreen extends StatelessWidget {
                     const Divider(height: 20),
                     if (orderId != null) _buildRow('Order ID', orderId!),
                     _buildRow('Item Ordered', '${fruit.name} × $qtyStr kg'),
-                    _buildRow('Price per kg', '₹${fruit.pricePerKg.toStringAsFixed(0)} / kg'),
+                    _buildRow(
+                      'Price per kg',
+                      '₹${fruit.pricePerKg.toStringAsFixed(0)} / kg',
+                    ),
                     _buildRow('Delivery Charge', '₹0'),
-                    _buildRow('Total Paid / Due', '₹${total.toStringAsFixed(0)}', isBold: true),
+                    _buildRow(
+                      'Total Paid / Due',
+                      '₹${total.toStringAsFixed(0)}',
+                      isBold: true,
+                    ),
                     _buildRow('Payment Method', '$paymentMethod (Demo)'),
                     _buildRow('Delivery Address', deliveryAddress),
                   ],
@@ -1063,7 +1219,10 @@ class DirectOrderSuccessScreen extends StatelessWidget {
                   },
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF2E8B57),
-                    side: const BorderSide(color: Color(0xFF2E8B57), width: 1.5),
+                    side: const BorderSide(
+                      color: Color(0xFF2E8B57),
+                      width: 1.5,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -1104,7 +1263,9 @@ class DirectOrderSuccessScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: isBold ? FontWeight.w900 : FontWeight.w700,
-                color: isBold ? const Color(0xFF2E8B57) : const Color(0xFF1F2A1F),
+                color: isBold
+                    ? const Color(0xFF2E8B57)
+                    : const Color(0xFF1F2A1F),
               ),
             ),
           ),

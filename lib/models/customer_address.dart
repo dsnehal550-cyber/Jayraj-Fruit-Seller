@@ -1,3 +1,5 @@
+const defaultCustomerCity = 'Chatrapati Sambhaji Nagar';
+
 class CustomerAddress {
   const CustomerAddress({
     required this.name,
@@ -22,16 +24,16 @@ class CustomerAddress {
   final double? longitude;
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'mobile': mobile,
-        'house': house,
-        'street': street,
-        'city': city,
-        'pin': pin,
-        'landmark': landmark,
-        'latitude': latitude,
-        'longitude': longitude,
-      };
+    'name': name,
+    'mobile': mobile,
+    'house': house,
+    'street': street,
+    'city': city,
+    'pin': pin,
+    'landmark': landmark,
+    'latitude': latitude,
+    'longitude': longitude,
+  };
 
   factory CustomerAddress.fromJson(Map<String, dynamic> json) {
     return CustomerAddress(
@@ -39,11 +41,15 @@ class CustomerAddress {
       mobile: (json['mobile'] ?? '').toString(),
       house: (json['house'] ?? '').toString(),
       street: (json['street'] ?? '').toString(),
-      city: (json['city'] ?? '').toString(),
+      city: defaultCustomerCity,
       pin: (json['pin'] ?? '').toString(),
       landmark: json['landmark']?.toString(),
-      latitude: json['latitude'] is num ? (json['latitude'] as num).toDouble() : null,
-      longitude: json['longitude'] is num ? (json['longitude'] as num).toDouble() : null,
+      latitude: json['latitude'] is num
+          ? (json['latitude'] as num).toDouble()
+          : null,
+      longitude: json['longitude'] is num
+          ? (json['longitude'] as num).toDouble()
+          : null,
     );
   }
 
